@@ -43,9 +43,16 @@ std::string ValhallaWrapper::get_matrix_query(
   }
   all_locations.pop_back(); // Remove trailing ','.
 
+  const std::string& costing =
+    _server.costing.empty() ? profile : _server.costing;
+
   query += "{\"sources\":[" + all_locations;
   query += "],\"targets\":[" + all_locations;
-  query += R"(],"costing":")" + profile + "\"}";
+  query += R"(],"costing":")" + costing + "\"";
+  if (!_server.exclude_polygons.empty()) {
+    query += R"(,"exclude_polygons":)" + _server.exclude_polygons;
+  }
+  query += "}";
 
   query += " HTTP/1.1\r\n";
   query += "Host: " + _server.host + "\r\n";
@@ -68,8 +75,14 @@ ValhallaWrapper::get_route_query(const std::vector<Location>& locations) const {
   }
   query.pop_back(); // Remove trailing ','.
 
-  query += R"(],"costing":")" + profile + "\"";
+  const std::string& costing =
+    _server.costing.empty() ? profile : _server.costing;
+
+  query += R"(],"costing":")" + costing + "\"";
   query += "," + _routing_args;
+  if (!_server.exclude_polygons.empty()) {
+    query += R"(,"exclude_polygons":)" + _server.exclude_polygons;
+  }
   query += "}";
 
   query += " HTTP/1.1\r\n";

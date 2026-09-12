@@ -147,8 +147,14 @@ Matrices HttpWrapper::get_matrices(const std::vector<Location>& locs) const {
   }
   assert(json_result[_matrix_distances_key.c_str()].Size() == m_size);
 
-  // Build matrices while checking for unfound routes ('null' values)
-  // to avoid unexpected behavior.
+  // Build matrices while checking for unfound routes ('null' values).
+  // These are filled with a large sentinel duration/distance instead
+  // of being left at the Matrix<T> default of 0 (which would look
+  // like free, instant travel and could make the solver actually
+  // prefer an impossible edge), and reported as a warning rather than
+  // aborting the whole solve, since this happens by design whenever
+  // e.g. a location sits inside a restricted zone for the profile in
+  // use.
   Matrices m(m_size);
 
   std::vector<unsigned> nb_unfound_from_loc(m_size, 0);
@@ -162,11 +168,14 @@ Matrices HttpWrapper::get_matrices(const std::vector<Location>& locs) const {
     for (rapidjson::SizeType j = 0; j < m_size; ++j) {
       if (duration_value_is_null(duration_line[j]) ||
           distance_value_is_null(distance_line[j])) {
-        // No route found between i and j. Just storing info as we
-        // don't know yet which location is responsible between i
-        // and j.
+        // No route found between i and j. Storing info for the
+        // warning below and filling with a sentinel so this pair is
+        // never attractive to the solver, without invalidating the
+        // whole matrix.
         ++nb_unfound_from_loc[i];
         ++nb_unfound_to_loc[j];
+        m.durations[i][j] = UNFOUND_ROUTE_DURATION;
+        m.distances[i][j] = UNFOUND_ROUTE_DISTANCE;
       } else {
         m.durations[i][j] = get_duration_value(duration_line[j]);
         m.distances[i][j] = get_distance_value(distance_line[j]);
@@ -174,7 +183,18 @@ Matrices HttpWrapper::get_matrices(const std::vector<Location>& locs) const {
     }
   }
 
-  check_unfound(locs, nb_unfound_from_loc, nb_unfound_to_loc);
+  if (_server.exclude_polygons.empty()) {
+    // No intentional zone exclusion configured for this profile:
+    // preserve the original strict behavior where any unfound route
+    // is treated as a hard configuration error (e.g. bad
+    // coordinates, disconnected location).
+    check_unfound(locs, nb_unfound_from_loc, nb_unfound_to_loc);
+  }
+  // Otherwise, unfound routes are expected whenever a location falls
+  // inside a zone excluded for this profile. Those pairs are already
+  // safely represented above with UNFOUND_ROUTE_DURATION /
+  // UNFOUND_ROUTE_DISTANCE so the solver simply never picks them,
+  // instead of aborting the whole solve.
 
   return m;
 }

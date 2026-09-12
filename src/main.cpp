@@ -193,6 +193,11 @@ int main(int argc, char** argv) {
   }
 
   try {
+    // Any exclude_polygons in the input JSON must be merged into
+    // cl_args.servers before Input is constructed, since
+    // Input::_servers is set once and never mutated afterward.
+    vroom::io::apply_exclude_polygons(cl_args.servers, cl_args.input);
+
     // Build problem.
     vroom::Input problem_instance(cl_args.servers,
                                   cl_args.router,

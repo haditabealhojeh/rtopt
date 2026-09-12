@@ -11,6 +11,8 @@ All rights reserved (see LICENSE).
 
 #include "../include/rapidjson/include/rapidjson/document.h"
 #include "../include/rapidjson/include/rapidjson/error/en.h"
+#include "../include/rapidjson/include/rapidjson/stringbuffer.h"
+#include "../include/rapidjson/include/rapidjson/writer.h"
 
 #include "utils/input_parser.h"
 
@@ -548,6 +550,56 @@ template <class T> inline Matrix<T> get_matrix(rapidjson::Value& m) {
   }
 
   return matrix;
+}
+
+void apply_exclude_polygons(Servers& servers, const std::string& input_str) {
+  rapidjson::Document json_input;
+  if (json_input.Parse(input_str.c_str()).HasParseError()) {
+    // Let the regular parse() report this properly; nothing to do
+    // here.
+    return;
+  }
+  if (!json_input.IsObject()) {
+    return;
+  }
+
+  if (json_input.HasMember("exclude_polygons") &&
+      json_input["exclude_polygons"].IsObject()) {
+    for (auto& profile_entry : json_input["exclude_polygons"].GetObject()) {
+      if (!profile_entry.name.IsString()) {
+        throw InputException("Invalid exclude_polygons profile key.");
+      }
+      if (!profile_entry.value.IsArray()) {
+        throw InputException("Invalid exclude_polygons value for profile " +
+                             std::string(profile_entry.name.GetString()) +
+                             ".");
+      }
+
+      rapidjson::StringBuffer buffer;
+      rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
+      profile_entry.value.Accept(writer);
+
+      // Creates a default-constructed Server (host 0.0.0.0, port
+      // 5000) if this profile wasn't already set up via -a/-p.
+      servers[profile_entry.name.GetString()].exclude_polygons =
+        buffer.GetString();
+    }
+  }
+
+  if (json_input.HasMember("costing") && json_input["costing"].IsObject()) {
+    for (auto& profile_entry : json_input["costing"].GetObject()) {
+      if (!profile_entry.name.IsString()) {
+        throw InputException("Invalid costing profile key.");
+      }
+      if (!profile_entry.value.IsString()) {
+        throw InputException("Invalid costing value for profile " +
+                             std::string(profile_entry.name.GetString()) +
+                             ".");
+      }
+      servers[profile_entry.name.GetString()].costing =
+        profile_entry.value.GetString();
+    }
+  }
 }
 
 void parse(Input& input, const std::string& input_str, bool geometry) {

@@ -77,6 +77,18 @@ constexpr UserCost DEFAULT_COST_PER_HOUR = 3600;
 constexpr UserCost DEFAULT_COST_PER_TASK_HOUR = 0;
 constexpr UserCost DEFAULT_COST_PER_KM = 0;
 
+// Sentinel values used in place of a real duration/distance when the
+// routing engine reports no route exists between two locations (e.g.
+// a location made unreachable on purpose via exclude_polygons). Both
+// are picked to be unambiguously larger than any realistic real-world
+// value, while staying with a large safety margin under the point
+// where internal scaling (see DURATION_FACTOR above and
+// scale_to_user_duration's overflow assert) could wrap or overflow
+// even if several such legs were summed in one route. 30 days is
+// ~1650x under that ceiling for a single leg.
+constexpr UserDuration UNFOUND_ROUTE_DURATION = 30 * 24 * 3600; // 30 days.
+constexpr UserDistance UNFOUND_ROUTE_DISTANCE = 10'000'000;     // 10 000 km.
+
 constexpr Priority MAX_PRIORITY = 100;
 constexpr double MAX_SPEED_FACTOR = 5.0;
 constexpr unsigned MAX_EXPLORATION_LEVEL = 5;
@@ -97,6 +109,18 @@ struct Server {
   std::string host;
   std::string port;
   std::string path;
+  // Raw JSON array of polygon rings to exclude for this profile,
+  // e.g. [[[lon,lat],[lon,lat],...]], in Valhalla's exclude_polygons
+  // format. Left empty when no zone restriction applies. Only
+  // consumed by ValhallaWrapper for now.
+  std::string exclude_polygons;
+  // Optional override for the actual Valhalla costing model name
+  // (e.g. "truck", "auto") sent in requests for this profile. Lets
+  // several VROOM profiles (e.g. "truck_even"/"truck_odd", used to
+  // carry distinct exclude_polygons) share the same underlying
+  // Valhalla vehicle type. Falls back to the VROOM profile name
+  // itself when left empty, preserving prior behavior.
+  std::string costing;
 
   Server() : host("0.0.0.0"), port("5000") {
   }
@@ -107,6 +131,16 @@ struct Server {
 
   Server(std::string host, std::string port, std::string path)
     : host(std::move(host)), port(std::move(port)), path(std::move(path)) {
+  }
+
+  Server(std::string host,
+         std::string port,
+         std::string path,
+         std::string exclude_polygons)
+    : host(std::move(host)),
+      port(std::move(port)),
+      path(std::move(path)),
+      exclude_polygons(std::move(exclude_polygons)) {
   }
 };
 
